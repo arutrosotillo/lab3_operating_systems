@@ -24,7 +24,16 @@ typedef struct {
   Operation *operations;
   int start_index;
   int end_index;
+  queue *q;  // Including queue pointer in the ProducerArgs
 } ProducerArgs;
+
+// Define a structure to represent each queue element
+typedef struct {
+    int product;    // Product ID
+    int op;         // Operation type, where 0 might represent PURCHASE and 1 SALE
+    int units;      // Number of units involved in the operation
+} element;
+
 
 // Function prototype for producer thread
 void *producer(void *args);
@@ -99,6 +108,14 @@ int main (int argc, const char * argv[])
   // Close the file
   fclose(fd);
 
+  // Initialize the queue
+  queue *q = queue_init(buffer_size);
+    if (q == NULL) {
+        perror("Failed to initialize the queue.");
+        free(operations);
+        return -1;
+    }
+
   // Calculate number of operations per producer
   int ops_per_producer = num_operations / num_producers;
   int remainder = num_operations % num_producers;
@@ -111,6 +128,7 @@ int main (int argc, const char * argv[])
     producer_args[i].operations = operations;
     producer_args[i].start_index = start_index;
     producer_args[i].end_index = start_index + ops_per_producer + (i < remainder ? 1 : 0) - 1;
+    producer_args[i].q = q;  // Set the queue here
     start_index = producer_args[i].end_index + 1;
 
     // Create producer thread
@@ -137,6 +155,25 @@ int main (int argc, const char * argv[])
   return 0;
 }
 
+// Producer thread function
 void *producer(void *args) {
-    // Código para el hilo productor
+    ProducerArgs *pargs = (ProducerArgs *)args;
+    queue *q = pargs->q;  // Extract queue from the passed ProducerArgs
+    Operation *operations = pargs->operations;
+
+    // Iterate over the assigned range of operations
+    for (int i = pargs->start_index; i <= pargs->end_index; i++) {
+        // Create an element for the queue from the operation data
+        element new_element;
+        new_element.product = operations[i].product_id;  // Set product ID
+        new_element.op = (strcmp(operations[i].operation_type, "PURCHASE") == 0) ? 0 : 1; // Set operation type: 0 for PURCHASE, 1 for SALE
+        new_element.units = operations[i].units;  // Set units involved in the operation
+
+        // Enqueue the element into the shared queue
+        queue_put(q, &new_element);  // Assuming queue_put is adapted to handle 'element'
+    }
+
+    // Optionally, return any result needed or NULL if nothing to return
+    pthread_exit(NULL);
+    return NULL;
 }
