@@ -95,21 +95,46 @@ struct element* queue_get(queue *q){
 }
 
 //To check queue state
-int queue_empty(queue *q)
-{
-  
-  return 0;
+int queue_empty(queue *q){
+  if(q->size==0){
+    // The queue is empty
+    return 1;
+  }
+  else{
+    // The queue is not empty
+    return 0;
+  }
 }
 
-int queue_full(queue *q)
-{
-  
-  return 0;
+// To check queue state
+int queue_full(queue *q){
+  if(q->size==q->capacity){
+    // The queue is full
+    return 1;
+  }
+  else{
+    // The queue is not full
+    return 0;
+  }
 }
 
 //To destroy the queue and free the resources
-int queue_destroy(queue *q)
-{
+int queue_destroy(queue *q){
+  if(q==NULL){
+    // Queue does not exist
+    return -1;
+  }
 
+  // We free the memory allocated for the array of stored elements
+  free(q->elements);
+
+  // Destroy mutex and condition variables
+  pthread_mutex_destroy(&q->mutex);
+  pthread_cond_destroy(&q->not_empty);
+  pthread_cond_destroy(&q->not_full);
+
+  // Free the memory allocated for the queue
+  free(q);
+  
   return 0;
 }
