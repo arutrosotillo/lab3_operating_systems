@@ -6,27 +6,91 @@
 #include <string.h>
 #include "queue.h"
 
-//To create a queue
-queue* queue_init(int size)
-{
-
+//To create a queue and reserve the specified size as a parameter
+queue* queue_init(int size){
+  // Allocate memory for the queue structure
   queue * q = (queue *)malloc(sizeof(queue));
+  if (q == NULL){
+    perror("Memory allocation failed.\n");
+    exit(EXIT_FAILURE);
+  }
 
+  // Allocate memory for the array to store the elements
+  q->elements = (int*)malloc(size * sizeof(int));
+  if (q->elements == NULL){
+    perror("Memory allocation failed.\n");
+    // We free the previously allocated memory, as there has been an error
+    free(q);
+    exit(EXIT_FAILURE);
+  }
+
+  // Initialize the rest of the queue structure properties
+  q->capacity = size;   // Maximum capacity of the queue
+  q->front = 0;         // Index of the front element
+  q->tail = -1;         // Index of the tail element
+  q->size = 0;          // Current number of elements on the queue
+
+  // Initialize mutex and condition variable
+  // THis is before the mutex and the condition variable
+  // are used or locked.
+  phtread_mutex_init(&q->mutex, NULL);
+  pthread_cond_init(&q->not_full, NULL);
+  pthread_cond_init(&q->not_empty, NULL);
   return q;
 }
 
-// To Enqueue an element
-int queue_put(queue *q, struct element* x)
-{
-  
+// To Enqueue an element, if there is no space available
+// it must wait until the insertion can be done.
+// The enqued element will be at the tail
+int queue_put(queue *q, struct element* x){
+  // Thread acquiring lock on the mutex 
+  // before accessing the shared resource
+  pthread_mutex_lock(&q->mutex);
+
+  // If the queue is full, we will need to wait until
+  // there is available space
+  while(q->size == q->capacity){
+    pthread_cond_wait(&q->not_full, &q->mutex);
+  }
+
+  // Insert element in the queue when there is free space
+  q->elements[q->tail] = *x;
+  // This is due to the circular schema of our buffer
+  q->tail = (q->tail + 1) % q->capacity; 
+  q->size++;
+
+  // When the thread has already enqueued an element (using
+  // shared resource), we release the lock
+  pthread_mutex_unlock(&q->mutex);
+
   return 0;
 }
 
-// To Dequeue an element.
-struct element* queue_get(queue *q)
-{
+// To Dequeue an element. It returns the eliminated element.
+// The dequeued element will be the one in the front.
+struct element* queue_get(queue *q){
   struct element* element;
-  
+
+  // Thread acquiring lock on the mutex 
+  // before accessing the shared resource
+  pthread_mutex_lock(&q->mutex);
+
+  // If the queue is empty we will need to wait
+  // until an element is enqueued.
+  while(q->size == 0){
+    pthread_cond_wait(&q->not_empty, &q->mutex);
+  }
+
+  // Eliminate the element from the front of the queue
+  element = &q->elements[q->front];
+  // This is due the circular schema of our buffer
+  q->front = (q->front + 1) % q->capacity;
+  q->size--;
+
+  // When the thread has already dequeued an element (using
+  // shared resource), we release the lock
+  pthread_mutex_unlock(&q->mutex);
+
   return element;
 }
 

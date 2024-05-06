@@ -19,7 +19,6 @@ typedef struct {
   int units;
 } Operation;
 
-
 // Define arguments structure for the producer thread
 typedef struct {
   Operation *operations;
