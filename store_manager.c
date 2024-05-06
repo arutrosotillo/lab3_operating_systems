@@ -22,7 +22,6 @@ typedef struct {
 // Define arguments structure for the producer thread
 typedef struct {
   Operation *operations;
-  int num_operations;
   int start_index;
   int end_index;
 } ProducerArgs;
@@ -91,9 +90,6 @@ int main (int argc, const char * argv[])
         operations[line].product_id = product_id;
         strcpy(operations[line].operation_type, operation_type);
         operations[line].units = units;
-        if (strcmp(operation_type, "PURCHASE") == 0){
-          num_purchases++;
-        }
       }
       
     }
@@ -104,18 +100,17 @@ int main (int argc, const char * argv[])
   fclose(fd);
 
   // Calculate number of operations per producer
-  int ops_per_producer = num_purchases / num_producers;
-  int remainder = num_purchases % num_producers;
+  int ops_per_producer = num_operations / num_producers;
+  int remainder = num_operations % num_producers;
   pthread_t producers[num_producers];
   ProducerArgs producer_args[num_producers];
 
   // Distribute operations among producers
-  int start_index = 0;
+  int start_index = 1;
   for (int i = 0; i < num_producers; i++) {
     producer_args[i].operations = operations;
-    producer_args[i].num_operations = ops_per_producer + (i < remainder ? 1 : 0);
     producer_args[i].start_index = start_index;
-    producer_args[i].end_index = start_index + producer_args[i].num_operations - 1;
+    producer_args[i].end_index = start_index + ops_per_producer + (i < remainder ? 1 : 0) - 1;
     start_index = producer_args[i].end_index + 1;
 
     // Create producer thread
