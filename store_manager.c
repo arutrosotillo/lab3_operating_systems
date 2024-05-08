@@ -12,45 +12,30 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
-// Define a structure to hold each operation
-typedef struct {
-  int product_id;
-  char operation_type[20];
-  int units;
-} Operation;
-
 // Define arguments structure for the producer thread
 typedef struct {
-  Operation *operations;
+  element *elements;
   int start_index;
   int end_index;
   queue *q;  // Including queue pointer in the ProducerArgs
 } ProducerArgs;
 
-// Define a structure to represent each queue element
-typedef struct {
-    int product;    // Product ID
-    int op;         // Operation type, where 0 might represent PURCHASE and 1 SALE
-    int units;      // Number of units involved in the operation
-} element;
-
-
 // Function prototype for producer thread
 void *producer(void *args);
+// Function prototype for consumer thread
+void *consumer(void *arg);
 
 int main (int argc, const char * argv[])
-{
+{ 
   int profits = 0;
   int product_stock [5] = {0};
   char buffer[2000]; // Buffer to hold each byte read from the file
   int num_operations;
-  const char *file_name = argv[1];
   int num_producers = atoi(argv[2]);
   int num_consumers = atoi(argv[3]);
   int buffer_size = atoi(argv[4]);
   FILE *fd;
   int line = 0;
-  int num_purchases = 0;
 
   // Open the file
   fd = fopen(argv[1], "r");
@@ -58,17 +43,17 @@ int main (int argc, const char * argv[])
     perror("Error opening file.");
     return -1;
   }
-
+  
   // Read the first line
   if (fgets(buffer, 100000, fd) != NULL) {
     num_operations = atoi(buffer);
   } else {
     perror("Empty file.");
   }
-
+  printf("OK");
   // Allocate memory for operations array
-  Operation *operations = (Operation *)malloc(num_operations * sizeof(Operation));
-  if (operations == NULL) {
+  element *elements = (element *)malloc(num_operations * sizeof(element));
+  if (elements == NULL) {
     perror("Memory allocation failed.");
     return -1;
   }
@@ -79,7 +64,7 @@ int main (int argc, const char * argv[])
     char operation_type[20];
 
     // Parse the line to extract product_id, operation_type, and units
-    if (sscanf(buffer, "%d %s %d", &product_id, &operation_type, &units) != 3) {
+    if (sscanf(buffer, "%d %s %d", &product_id, operation_type, &units) != 3) {
       printf("This line has a incorrect format: %s\n", buffer);
       continue; // Skip this line and move to the next one
     }
@@ -96,36 +81,36 @@ int main (int argc, const char * argv[])
       else
       {
         // Store the operation in the operations array
-        operations[line].product_id = product_id;
-        strcpy(operations[line].operation_type, operation_type);
-        operations[line].units = units;
+        elements[line].product_id = product_id;
+        elements[line].op = (strcmp(operation_type, "PURCHASE") == 0) ? 0 : 1; // Set operation type: 0 for PURCHASE, 1 for SALE
+        elements[line].units = units;
       }
       
     }
     line++;
   }
-
+  
   // Close the file
   fclose(fd);
 
   // Initialize the queue
   queue *q = queue_init(buffer_size);
-    if (q == NULL) {
-        perror("Failed to initialize the queue.");
-        free(operations);
-        return -1;
-    }
+  if (q == NULL) {
+    perror("Failed to initialize the queue.");
+    free(elements);
+    return -1;
+  }
 
   // Calculate number of operations per producer
   int ops_per_producer = num_operations / num_producers;
   int remainder = num_operations % num_producers;
   pthread_t producers[num_producers];
   ProducerArgs producer_args[num_producers];
-
+  
   // Distribute operations among producers
   int start_index = 1;
   for (int i = 0; i < num_producers; i++) {
-    producer_args[i].operations = operations;
+    producer_args[i].elements = elements;
     producer_args[i].start_index = start_index;
     producer_args[i].end_index = start_index + ops_per_producer + (i < remainder ? 1 : 0) - 1;
     producer_args[i].q = q;  // Set the queue here
@@ -140,8 +125,26 @@ int main (int argc, const char * argv[])
     pthread_join(producers[i], NULL);
   }
 
+  // Create consumer threads
+  pthread_t consumers[num_consumers]; // num_consumers is the number of consumer threads
+  for (int i = 0; i < num_consumers; i++) {
+    pthread_create(&consumers[i], NULL, consumer, (void *)q);
+  }
+
+  // Join consumer threads
+  for (int i = 0; i < num_consumers; i++) {
+    int data [6];
+    pthread_join(consumers[i], (void **)&data);
+    profits += data[0];
+    for (int j = 1; j < 6; j++) {
+      product_stock[j - 1] += data[j];
+    }
+  }
+
   // Free allocated memory
-  free(operations);
+  free(elements);
+  // Destroy the queue
+  queue_destroy(q);
 
   // Output
   printf("Total: %d euros\n", profits);
@@ -157,23 +160,65 @@ int main (int argc, const char * argv[])
 
 // Producer thread function
 void *producer(void *args) {
-    ProducerArgs *pargs = (ProducerArgs *)args;
-    queue *q = pargs->q;  // Extract queue from the passed ProducerArgs
-    Operation *operations = pargs->operations;
+  ProducerArgs *pargs = (ProducerArgs *)args;
+  queue *q = pargs->q;  // Extract queue from the passed ProducerArgs
+  element *elements = pargs->elements;
 
-    // Iterate over the assigned range of operations
-    for (int i = pargs->start_index; i <= pargs->end_index; i++) {
-        // Create an element for the queue from the operation data
-        element new_element;
-        new_element.product = operations[i].product_id;  // Set product ID
-        new_element.op = (strcmp(operations[i].operation_type, "PURCHASE") == 0) ? 0 : 1; // Set operation type: 0 for PURCHASE, 1 for SALE
-        new_element.units = operations[i].units;  // Set units involved in the operation
+  // Iterate over the assigned range of operations
+  for (int i = pargs->start_index; i <= pargs->end_index; i++) {
+    // Create an element for the queue from the operation data
+    element new_element;
+    new_element.product_id = elements[i].product_id;  // Set product ID
+    new_element.op = elements[i].op;
+    new_element.units = elements[i].units;  // Set units involved in the operation
 
-        // Enqueue the element into the shared queue
-        queue_put(q, &new_element);  // Assuming queue_put is adapted to handle 'element'
+    // Enqueue the element into the shared queue
+    queue_put(q, &new_element);  // Assuming queue_put is adapted to handle 'element'
+  }
+  pthread_exit(NULL);
+  return NULL;
+}
+
+// Consumer thread function
+void *consumer(void *arg) {
+  queue *q = (queue *)arg;  // Extract queue from the argument
+  int *data = malloc(6 * sizeof(int)); // Dynamically allocate memory for data
+  if (data == NULL) {
+    perror("Memory allocation failed for consumer data.");
+    pthread_exit(NULL);
+  }
+
+  int cost[5] = {2,5,15,25,100};
+  int price[5] = {3,10,20,40,125};
+
+  while (1) {
+    // Extract element from the queue
+    element *elements = queue_get(q);
+
+    // Check if it's the termination signal
+    if (elements == NULL) {
+      break;  // Terminate the thread
     }
 
-    // Optionally, return any result needed or NULL if nothing to return
-    pthread_exit(NULL);
-    return NULL;
+    // Process the operation
+    // Calculate profit and update product stock based on the operation
+    int product_id = elements->product_id;
+    int operation_type = elements->op;
+    int units = elements->units;
+
+    // Update product stock and profit
+    if (operation_type == 0) {  // PURCHASE
+      data[product_id] += units;
+      data[0] -= cost[product_id - 1] * units;
+    } else {  // SALE
+      // Update product stock and profit accordingly
+      data[product_id] -= units;
+      data[0] += price[product_id - 1] * units;
+    }
+    // Free the memory allocated for the element
+    free(elements);
+  }
+  pthread_exit(NULL);
+  // Return the profit and the stock of each element
+  return data;
 }
