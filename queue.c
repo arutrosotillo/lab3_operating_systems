@@ -16,7 +16,7 @@ queue* queue_init(int size){
   }
 
   // Allocate memory for the array to store the elements
-  q->elements = (int*)malloc(size * sizeof(int));
+  q->elements = (element*)malloc(size * sizeof(element));
   if (q->elements == NULL){
     perror("Memory allocation failed.\n");
     // We free the previously allocated memory, as there has been an error
@@ -33,7 +33,7 @@ queue* queue_init(int size){
   // Initialize mutex and condition variable
   // THis is before the mutex and the condition variable
   // are used or locked.
-  phtread_mutex_init(&q->mutex, NULL);
+  pthread_mutex_init(&q->mutex, NULL);
   pthread_cond_init(&q->not_full, NULL);
   pthread_cond_init(&q->not_empty, NULL);
   return q;
