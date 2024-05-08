@@ -59,6 +59,11 @@ int queue_put(queue *q, struct element* x){
   q->tail = (q->tail + 1) % q->capacity; 
   q->size++;
 
+  // Each time an element is enqueued we signal the not_empty
+  // condition variable, so that if the buffer was empty, and 
+  // the dequeing had to wait, it can now go on
+  pthread_cond_signal(&q->not_empty);
+
   // When the thread has already enqueued an element (using
   // shared resource), we release the lock
   pthread_mutex_unlock(&q->mutex);
@@ -86,6 +91,11 @@ struct element* queue_get(queue *q){
   // This is due the circular schema of our buffer
   q->front = (q->front + 1) % q->capacity;
   q->size--;
+
+  // Each time an element is dequeued we signal the not_full
+  // condition variable, so that if the buffer was full, and 
+  // the enqueing had to wait, it can now go on
+  pthread_cond_signal(&q->not_full);
 
   // When the thread has already dequeued an element (using
   // shared resource), we release the lock
@@ -135,6 +145,6 @@ int queue_destroy(queue *q){
 
   // Free the memory allocated for the queue
   free(q);
-  
+
   return 0;
 }

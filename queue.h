@@ -1,8 +1,9 @@
 //SSOO-P3 23/24
-#include <pthread.h>
 
 #ifndef HEADER_FILE
 #define HEADER_FILE
+
+#include <pthread.h>
 
 // Structure of the element to be stored in the queue
 typedef struct element {
