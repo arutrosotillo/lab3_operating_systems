@@ -16,7 +16,7 @@ queue* queue_init(int size){
   }
 
   // Allocate memory for the array to store the elements
-  q->elements = (element*)malloc(size * sizeof(element));
+  q->elements = malloc(size * sizeof(struct element));
   if (q->elements == NULL){
     perror("Memory allocation failed.\n");
     // We free the previously allocated memory, as there has been an error
@@ -56,13 +56,13 @@ int queue_put(queue *q, struct element* x){
   // Insert element in the queue when there is free space
   q->elements[q->tail] = *x;
   // This is due to the circular schema of our buffer
-  q->tail = (q->tail + 1) % q->capacity; 
+  q->tail = (q->tail + 1) % q->capacity;
   q->size++;
 
   // Each time an element is enqueued we signal the not_empty
   // condition variable, so that if the buffer was empty, and 
   // the dequeing had to wait, it can now go on
-  pthread_cond_signal(&q->not_empty);
+  pthread_cond_broadcast(&q->not_empty);
 
   // When the thread has already enqueued an element (using
   // shared resource), we release the lock
@@ -74,7 +74,7 @@ int queue_put(queue *q, struct element* x){
 // To Dequeue an element. It returns the eliminated element.
 // The dequeued element will be the one in the front.
 struct element* queue_get(queue *q){
-  struct element* element;
+  
 
   // Thread acquiring lock on the mutex 
   // before accessing the shared resource
@@ -86,8 +86,10 @@ struct element* queue_get(queue *q){
     pthread_cond_wait(&q->not_empty, &q->mutex);
   }
 
+  struct element* element = malloc(sizeof(struct element));
+
   // Eliminate the element from the front of the queue
-  element = &q->elements[q->front];
+  *element = q->elements[q->front];
   // This is due the circular schema of our buffer
   q->front = (q->front + 1) % q->capacity;
   q->size--;
@@ -95,7 +97,7 @@ struct element* queue_get(queue *q){
   // Each time an element is dequeued we signal the not_full
   // condition variable, so that if the buffer was full, and 
   // the enqueing had to wait, it can now go on
-  pthread_cond_signal(&q->not_full);
+  pthread_cond_broadcast(&q->not_full);
 
   // When the thread has already dequeued an element (using
   // shared resource), we release the lock
@@ -136,7 +138,7 @@ int queue_destroy(queue *q){
   }
 
   // We free the memory allocated for the array of stored elements
-  free(q->elements);
+  //free(q->elements);
 
   // Destroy mutex and condition variables
   pthread_mutex_destroy(&q->mutex);

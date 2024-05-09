@@ -23,7 +23,7 @@ typedef struct {
 // Function prototype for producer thread
 void *producer(void *args);
 // Function prototype for consumer thread
-void *consumer(void *arg);
+void *consumer(void *args);
 
 int main (int argc, const char * argv[])
 { 
@@ -50,7 +50,7 @@ int main (int argc, const char * argv[])
   } else {
     perror("Empty file.");
   }
-  printf("OK");
+
   // Allocate memory for operations array
   element *elements = (element *)malloc(num_operations * sizeof(element));
   if (elements == NULL) {
@@ -103,16 +103,23 @@ int main (int argc, const char * argv[])
 
   // Calculate number of operations per producer
   int ops_per_producer = num_operations / num_producers;
-  int remainder = num_operations % num_producers;
+  int remainder1 = num_operations % num_producers;
   pthread_t producers[num_producers];
   ProducerArgs producer_args[num_producers];
+
+
+  // Calculate number of operations per consumer
+  int ops_per_consumer = num_operations / num_consumers;
+  int remainder2 = num_operations % num_consumers;
+  pthread_t consumers[num_consumers];
+  ProducerArgs consumer_args[num_consumers];
   
   // Distribute operations among producers
   int start_index = 1;
   for (int i = 0; i < num_producers; i++) {
     producer_args[i].elements = elements;
     producer_args[i].start_index = start_index;
-    producer_args[i].end_index = start_index + ops_per_producer + (i < remainder ? 1 : 0) - 1;
+    producer_args[i].end_index = start_index + ops_per_producer + (i < remainder1 ? 1 : 0) - 1;
     producer_args[i].q = q;  // Set the queue here
     start_index = producer_args[i].end_index + 1;
 
@@ -121,28 +128,43 @@ int main (int argc, const char * argv[])
   }
 
   // Wait for all producer threads to finish
+  //for (int i = 0; i < num_producers; i++) {
+  //  pthread_join(producers[i], NULL);
+  //}
+
+  start_index = 1;
+  // Create consumer threads
+  for (int i = 0; i < num_consumers; i++) {
+    consumer_args[i].start_index = start_index;
+    consumer_args[i].end_index = start_index + ops_per_consumer + (i < remainder2 ? 1 : 0) - 1;
+    consumer_args[i].q = q;  // Set the queue here
+    start_index = consumer_args[i].end_index + 1;
+    pthread_create(&consumers[i], NULL, consumer, (void *)&consumer_args[i]);
+  }
+
+  // Wait for all producer threads to finish
   for (int i = 0; i < num_producers; i++) {
     pthread_join(producers[i], NULL);
   }
 
-  // Create consumer threads
-  pthread_t consumers[num_consumers]; // num_consumers is the number of consumer threads
-  for (int i = 0; i < num_consumers; i++) {
-    pthread_create(&consumers[i], NULL, consumer, (void *)q);
-  }
-
   // Join consumer threads
   for (int i = 0; i < num_consumers; i++) {
-    int data [6];
+    //int data [6];
+    int *data;
     pthread_join(consumers[i], (void **)&data);
-    profits += data[0];
-    for (int j = 1; j < 6; j++) {
-      product_stock[j - 1] += data[j];
-    }
+    if(data != NULL){
+      profits += data[0];
+      for (int j = 1; j < 6; j++) {
+        product_stock[j - 1] += data[j];
+        printf("%d.\n", product_stock[j-1]);
+      }
+    }   
+    free(data);
+
   }
 
   // Free allocated memory
-  free(elements);
+  //free(data);
   // Destroy the queue
   queue_destroy(q);
 
@@ -180,23 +202,26 @@ void *producer(void *args) {
 }
 
 // Consumer thread function
-void *consumer(void *arg) {
-  queue *q = (queue *)arg;  // Extract queue from the argument
+void *consumer(void *args) {
+  ProducerArgs *cargs = (ProducerArgs *)args;
+  queue *q = cargs->q;  // Extract queue from the passed ProducerArgs
+  
   int *data = malloc(6 * sizeof(int)); // Dynamically allocate memory for data
   if (data == NULL) {
     perror("Memory allocation failed for consumer data.");
     pthread_exit(NULL);
   }
 
-  int cost[5] = {2,5,15,25,100};
-  int price[5] = {3,10,20,40,125};
+  int cost [5] = {2,5,15,25,100};
+  int price [5] = {3,10,20,40,125};
 
-  while (1) {
+  for (int i = cargs->start_index; i <= cargs->end_index; i++) {
     // Extract element from the queue
     element *elements = queue_get(q);
-
+    
     // Check if it's the termination signal
     if (elements == NULL) {
+      printf("finish\n");
       break;  // Terminate the thread
     }
 
@@ -205,20 +230,25 @@ void *consumer(void *arg) {
     int product_id = elements->product_id;
     int operation_type = elements->op;
     int units = elements->units;
-
-    // Update product stock and profit
-    if (operation_type == 0) {  // PURCHASE
-      data[product_id] += units;
-      data[0] -= cost[product_id - 1] * units;
-    } else {  // SALE
-      // Update product stock and profit accordingly
-      data[product_id] -= units;
-      data[0] += price[product_id - 1] * units;
-    }
+    printf("%d\n", product_id);
+    if(product_id<6){
+    
+      // Update product stock and profit
+      if (operation_type == 0) {  // PURCHASE
+        data[product_id] += units;
+        data[0] -= cost[product_id - 1] * units;
+      } else {  // SALE
+        // Update product stock and profit accordingly
+        data[product_id] -= units;
+        data[0] += price[product_id - 1] * units;
+      }
+    } 
     // Free the memory allocated for the element
     free(elements);
   }
-  pthread_exit(NULL);
+  //free(data);
+  pthread_exit((void *)data);
+  // pthread_exit(NULL);
   // Return the profit and the stock of each element
-  return data;
+  //return data;
 }
