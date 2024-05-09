@@ -34,8 +34,8 @@ queue* queue_init(int size){
   // THis is before the mutex and the condition variable
   // are used or locked.
   pthread_mutex_init(&q->mutex, NULL);
-  pthread_cond_init(&q->not_full, NULL);
   pthread_cond_init(&q->not_empty, NULL);
+  pthread_cond_init(&q->not_full, NULL);
   return q;
 }
 
@@ -50,19 +50,21 @@ int queue_put(queue *q, struct element* x){
   // If the queue is full, we will need to wait until
   // there is available space
   while(q->size == q->capacity){
-    pthread_cond_wait(&q->not_full, &q->mutex);
+    pthread_cond_wait(&q->not_empty, &q->mutex);
   }
 
   // Insert element in the queue when there is free space
-  q->elements[q->tail] = *x;
+  //q->elements[q->tail] = *x;
   // This is due to the circular schema of our buffer
-  q->tail = (q->tail + 1) % q->capacity;
+  //q->tail = (q->tail + 1) % q->capacity;
+  q->elements[(q->tail) % q->capacity] = *x;
+  q->tail++;
   q->size++;
 
   // Each time an element is enqueued we signal the not_empty
   // condition variable, so that if the buffer was empty, and 
   // the dequeing had to wait, it can now go on
-  pthread_cond_broadcast(&q->not_empty);
+  pthread_cond_signal(&q->not_full);
 
   // When the thread has already enqueued an element (using
   // shared resource), we release the lock
@@ -83,7 +85,7 @@ struct element* queue_get(queue *q){
   // If the queue is empty we will need to wait
   // until an element is enqueued.
   while(q->size == 0){
-    pthread_cond_wait(&q->not_empty, &q->mutex);
+    pthread_cond_wait(&q->not_full, &q->mutex);
   }
 
   struct element* element = malloc(sizeof(struct element));
@@ -93,11 +95,11 @@ struct element* queue_get(queue *q){
   // This is due the circular schema of our buffer
   q->front = (q->front + 1) % q->capacity;
   q->size--;
-
+  
   // Each time an element is dequeued we signal the not_full
   // condition variable, so that if the buffer was full, and 
   // the enqueing had to wait, it can now go on
-  pthread_cond_broadcast(&q->not_full);
+  pthread_cond_signal(&q->not_empty);
 
   // When the thread has already dequeued an element (using
   // shared resource), we release the lock

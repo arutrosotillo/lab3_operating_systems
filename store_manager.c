@@ -84,6 +84,7 @@ int main (int argc, const char * argv[])
         elements[line].product_id = product_id;
         elements[line].op = (strcmp(operation_type, "PURCHASE") == 0) ? 0 : 1; // Set operation type: 0 for PURCHASE, 1 for SALE
         elements[line].units = units;
+        
       }
       
     }
@@ -115,7 +116,7 @@ int main (int argc, const char * argv[])
   ProducerArgs consumer_args[num_consumers];
   
   // Distribute operations among producers
-  int start_index = 1;
+  int start_index = 0;
   for (int i = 0; i < num_producers; i++) {
     producer_args[i].elements = elements;
     producer_args[i].start_index = start_index;
@@ -132,7 +133,7 @@ int main (int argc, const char * argv[])
   //  pthread_join(producers[i], NULL);
   //}
 
-  start_index = 1;
+  start_index = 0;
   // Create consumer threads
   for (int i = 0; i < num_consumers; i++) {
     consumer_args[i].start_index = start_index;
@@ -156,7 +157,7 @@ int main (int argc, const char * argv[])
       profits += data[0];
       for (int j = 1; j < 6; j++) {
         product_stock[j - 1] += data[j];
-        printf("%d.\n", product_stock[j-1]);
+
       }
     }   
     free(data);
@@ -185,7 +186,7 @@ void *producer(void *args) {
   ProducerArgs *pargs = (ProducerArgs *)args;
   queue *q = pargs->q;  // Extract queue from the passed ProducerArgs
   element *elements = pargs->elements;
-
+  //printf("%d, %d\n", pargs->start_index, pargs->end_index);
   // Iterate over the assigned range of operations
   for (int i = pargs->start_index; i <= pargs->end_index; i++) {
     // Create an element for the queue from the operation data
@@ -193,6 +194,7 @@ void *producer(void *args) {
     new_element.product_id = elements[i].product_id;  // Set product ID
     new_element.op = elements[i].op;
     new_element.units = elements[i].units;  // Set units involved in the operation
+    //printf("%d, %d, %d.\n", new_element.product_id, new_element.op, new_element.units);
 
     // Enqueue the element into the shared queue
     queue_put(q, &new_element);  // Assuming queue_put is adapted to handle 'element'
@@ -215,6 +217,7 @@ void *consumer(void *args) {
   int cost [5] = {2,5,15,25,100};
   int price [5] = {3,10,20,40,125};
 
+  //printf("%d, %d\n", pargs->start_index, pargs->end_index);
   for (int i = cargs->start_index; i <= cargs->end_index; i++) {
     // Extract element from the queue
     element *elements = queue_get(q);
@@ -230,7 +233,7 @@ void *consumer(void *args) {
     int product_id = elements->product_id;
     int operation_type = elements->op;
     int units = elements->units;
-    printf("%d\n", product_id);
+
     if(product_id<6){
     
       // Update product stock and profit
