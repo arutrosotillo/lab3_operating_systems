@@ -27,7 +27,7 @@ queue* queue_init(int size){
   // Initialize the rest of the queue structure properties
   q->capacity = size;   // Maximum capacity of the queue
   q->front = 0;         // Index of the front element
-  q->tail = -1;         // Index of the tail element
+  q->tail = 0;         // Index of the tail element
   q->size = 0;          // Current number of elements on the queue
 
   // Initialize mutex and condition variable
