@@ -27,6 +27,11 @@ void *consumer(void *args);
 
 int main (int argc, const char * argv[])
 { 
+  //Check if there are less arguments or more than should be
+  if (argc != 5){
+    return -1;
+  }
+  
   int profits = 0;
   int product_stock [5] = {0};
   char buffer[2000] = ""; // Buffer to hold each byte read from the file
@@ -37,15 +42,10 @@ int main (int argc, const char * argv[])
   FILE *fd;
   int line = 0;
 
-  //Check if there are less arguments or more than should be
-  if (argc != 5){
-    return -1;
-  }
-  
   // Open the file
   fd = fopen(argv[1], "r");
   if (fd == NULL) {
-    perror("Error opening file.");
+    perror("Error opening file");
     return -1;
   }
   
@@ -53,13 +53,13 @@ int main (int argc, const char * argv[])
   if (fgets(buffer, 100000, fd) != NULL) {
     num_operations = atoi(buffer);
   } else {
-    perror("Empty file.");
+    perror("Empty file");
   }
 
   // Allocate memory for operations array
   element *elements = (element *)malloc(num_operations * sizeof(element));
   if (elements == NULL) {
-    perror("Memory allocation failed.");
+    perror("Memory allocation failed");
     return -1;
   }
 
@@ -70,7 +70,7 @@ int main (int argc, const char * argv[])
 
     // Parse the line to extract product_id, operation_type, and units
     if (sscanf(buffer, "%d %s %d", &product_id, operation_type, &units) != 3) {
-      printf("This line has a incorrect format: %s\n", buffer);
+      printf("Line %d has a incorrect format: %s\n", line + 2, buffer);
       continue; // Skip this line and move to the next one
     }
     else
@@ -79,8 +79,13 @@ int main (int argc, const char * argv[])
       int valid_product_id = (product_id >= 1 && product_id <= 5);
       int valid_operation_type = (strcmp(operation_type, "PURCHASE") == 0 || strcmp(operation_type, "SALE") == 0);
 
-      if (!valid_product_id || !valid_operation_type) {
-        printf("Invalid product_id or operation_type on line: %d\n", line + 2); // +2 because line index starts from 0 and we've already read one line
+      if (!valid_operation_type) {
+        printf("Line %d has an invalid operation_type: %s\n", line + 2, buffer);
+        continue; // Skip this line and move to the next one
+      }
+      else if (!valid_product_id)
+      {
+        printf("Line %d has an invalid product_id: %s\n", line + 2, buffer);
         continue; // Skip this line and move to the next one
       }
       else
@@ -88,10 +93,8 @@ int main (int argc, const char * argv[])
         // Store the operation in the operations array
         elements[line].product_id = product_id;
         elements[line].op = (strcmp(operation_type, "PURCHASE") == 0) ? 0 : 1; // Set operation type: 0 for PURCHASE, 1 for SALE
-        elements[line].units = units;
-        
+        elements[line].units = units;     
       }
-      
     }
     line++;
   }
@@ -113,7 +116,6 @@ int main (int argc, const char * argv[])
   pthread_t producers[num_producers];
   ProducerArgs producer_args[num_producers];
 
-
   // Calculate number of operations per consumer
   int ops_per_consumer = num_operations / num_consumers;
   int remainder2 = num_operations % num_consumers;
@@ -129,10 +131,11 @@ int main (int argc, const char * argv[])
     producer_args[i].q = q;  // Set the queue here
     start_index = producer_args[i].end_index + 1;
 
-    // Create producer thread
+    // Create producer thread with all its arguments
     pthread_create(&producers[i], NULL, producer, (void *)&producer_args[i]);
   }
 
+  // Distribute operations among consumers
   start_index = 0;
   // Create consumer threads
   for (int i = 0; i < num_consumers; i++) {
@@ -140,6 +143,8 @@ int main (int argc, const char * argv[])
     consumer_args[i].end_index = start_index + ops_per_consumer + (i < remainder2 ? 1 : 0) - 1;
     consumer_args[i].q = q;  // Set the queue here
     start_index = consumer_args[i].end_index + 1;
+
+    // Create consumer thread with all its arguments
     pthread_create(&consumers[i], NULL, consumer, (void *)&consumer_args[i]);
   }
 
@@ -148,7 +153,7 @@ int main (int argc, const char * argv[])
     pthread_join(producers[i], NULL);
   }
 
-  // Join consumer threads
+  // Wait for all consumers threads to finish
   for (int i = 0; i < num_consumers; i++) {
     //int data [6];
     int *data;
@@ -157,12 +162,12 @@ int main (int argc, const char * argv[])
       profits += data[0];
       for (int j = 1; j < 6; j++) {
         product_stock[j - 1] += data[j];
-
       }
     }   
     free(data);
   }
 
+  // We destroy the queue
   queue_destroy(q);
 
   // Output
@@ -186,7 +191,7 @@ void *producer(void *args) {
   // Iterate over the assigned range of operations
   for (int i = pargs->start_index; i <= pargs->end_index; i++) {
     // Create an element for the queue from the operation data
-    element *new_element = malloc(sizeof(element));
+    element *new_element = malloc(sizeof(element)); // Allocate space in the memory for the new element
     new_element->product_id = elements[i].product_id;  // Set product ID
     new_element->op = elements[i].op; // Set operation type
     new_element->units = elements[i].units; // Set units involved in the operation
