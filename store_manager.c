@@ -29,14 +29,19 @@ int main (int argc, const char * argv[])
 { 
   int profits = 0;
   int product_stock [5] = {0};
-  char buffer[2000]; // Buffer to hold each byte read from the file
-  int num_operations;
+  char buffer[2000] = ""; // Buffer to hold each byte read from the file
+  int num_operations = 0;
   int num_producers = atoi(argv[2]);
   int num_consumers = atoi(argv[3]);
   int buffer_size = atoi(argv[4]);
   FILE *fd;
   int line = 0;
 
+  //Check if there are less arguments or more than should be
+  if (argc != 5){
+    return -1;
+  }
+  
   // Open the file
   fd = fopen(argv[1], "r");
   if (fd == NULL) {
@@ -128,11 +133,6 @@ int main (int argc, const char * argv[])
     pthread_create(&producers[i], NULL, producer, (void *)&producer_args[i]);
   }
 
-  // Wait for all producer threads to finish
-  //for (int i = 0; i < num_producers; i++) {
-  //  pthread_join(producers[i], NULL);
-  //}
-
   start_index = 0;
   // Create consumer threads
   for (int i = 0; i < num_consumers; i++) {
@@ -161,12 +161,8 @@ int main (int argc, const char * argv[])
       }
     }   
     free(data);
-
   }
 
-  // Free allocated memory
-  //free(data);
-  // Destroy the queue
   queue_destroy(q);
 
   // Output
@@ -186,18 +182,17 @@ void *producer(void *args) {
   ProducerArgs *pargs = (ProducerArgs *)args;
   queue *q = pargs->q;  // Extract queue from the passed ProducerArgs
   element *elements = pargs->elements;
-  //printf("%d, %d\n", pargs->start_index, pargs->end_index);
+  
   // Iterate over the assigned range of operations
   for (int i = pargs->start_index; i <= pargs->end_index; i++) {
     // Create an element for the queue from the operation data
-    element new_element;
-    new_element.product_id = elements[i].product_id;  // Set product ID
-    new_element.op = elements[i].op;
-    new_element.units = elements[i].units;  // Set units involved in the operation
-    //printf("%d, %d, %d.\n", new_element.product_id, new_element.op, new_element.units);
+    element *new_element = malloc(sizeof(element));
+    new_element->product_id = elements[i].product_id;  // Set product ID
+    new_element->op = elements[i].op; // Set operation type
+    new_element->units = elements[i].units; // Set units involved in the operation
 
     // Enqueue the element into the shared queue
-    queue_put(q, &new_element);  // Assuming queue_put is adapted to handle 'element'
+    queue_put(q, new_element);  // Assuming queue_put is adapted to handle 'element'
   }
   pthread_exit(NULL);
   return NULL;
@@ -213,45 +208,35 @@ void *consumer(void *args) {
     perror("Memory allocation failed for consumer data.");
     pthread_exit(NULL);
   }
-
   int cost [5] = {2,5,15,25,100};
   int price [5] = {3,10,20,40,125};
 
-  //printf("%d, %d\n", pargs->start_index, pargs->end_index);
   for (int i = cargs->start_index; i <= cargs->end_index; i++) {
     // Extract element from the queue
     element *elements = queue_get(q);
-    
     // Check if it's the termination signal
     if (elements == NULL) {
       printf("finish\n");
       break;  // Terminate the thread
     }
-
+    
     // Process the operation
     // Calculate profit and update product stock based on the operation
     int product_id = elements->product_id;
     int operation_type = elements->op;
     int units = elements->units;
 
-    if(product_id<6){
+    // Update product stock and profit
+    if (operation_type == 0) {  // PURCHASE
+      data[product_id] += units;
+      data[0] -= cost[product_id - 1] * units;
+    } else {  // SALE
+      data[product_id] -= units;
+      data[0] += price[product_id - 1] * units;
+    }
     
-      // Update product stock and profit
-      if (operation_type == 0) {  // PURCHASE
-        data[product_id] += units;
-        data[0] -= cost[product_id - 1] * units;
-      } else {  // SALE
-        // Update product stock and profit accordingly
-        data[product_id] -= units;
-        data[0] += price[product_id - 1] * units;
-      }
-    } 
     // Free the memory allocated for the element
     free(elements);
   }
-  //free(data);
   pthread_exit((void *)data);
-  // pthread_exit(NULL);
-  // Return the profit and the stock of each element
-  //return data;
 }
